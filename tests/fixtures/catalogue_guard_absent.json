@@ -1,0 +1,9 @@
+{
+  "repos": [
+    {"repo": "policy-compiler", "family": "Applied reasoning"},
+    {"repo": "a2a-compliance", "family": "Runtime controls"},
+    {"repo": "loomground-escalation", "family": "Diagnostic operators"},
+    {"repo": "evidence-emitter", "family": "Assurance artifacts"}
+  ],
+  "pipeline": []
+}

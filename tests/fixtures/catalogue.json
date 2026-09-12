@@ -1,0 +1,15 @@
+{
+  "repos": [
+    {"repo": "ingest", "family": "Evidence pipeline"},
+    {"repo": "diagnostic", "family": "Diagnostic operators"},
+    {"repo": "policy-compiler", "family": "Applied reasoning"},
+    {"repo": "a2a-compliance", "family": "Runtime controls"},
+    {"repo": "privacy-shield", "family": "Runtime controls"},
+    {"repo": "loomground-escalation", "family": "Diagnostic operators"},
+    {"repo": "evidence-emitter", "family": "Assurance artifacts"}
+  ],
+  "pipeline": [
+    {"step": 1, "stage": "ingest", "repo": "ingest"},
+    {"step": 2, "stage": "diagnostic", "repo": "diagnostic"}
+  ]
+}
