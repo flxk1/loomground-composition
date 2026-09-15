@@ -42,15 +42,44 @@ def test_missing_non_guard_stage_is_skipped_without_breaking():
     assert report.verdict == PASS
 
 
-def test_topology_forbidden_edge_is_broken(tmp_path):
+def test_topology_forbidden_up_dependency_is_broken(tmp_path):
+    # Declared-dependency rule: a base-plane repo whose depends_on names a
+    # HIGHER-plane (ctrl-family) repo present in the catalogue is topology-forbidden.
     data = {
         "repos": [
-            {"repo": "outer", "family": "ctrl"},
-            {"repo": "base", "family": "Standard"},
+            {"repo": "base-consumer", "family": "Standard",
+             "depends_on": ["ctrl-orchestrator"]},
+            {"repo": "ctrl-orchestrator", "family": "ctrl orchestration"},
         ],
         "pipeline": [
-            {"step": 1, "repo": "outer"},
-            {"step": 2, "repo": "base"},
+            {"step": 1, "repo": "base-consumer"},
+        ],
+    }
+    catalogue = tmp_path / "catalogue.json"
+    catalogue.write_text(json.dumps(data), encoding="utf-8")
+
+    report = validate("grounding-pipeline", catalogue_path=catalogue)
+    stage = next(line for line in report.stages if line.repo == "base-consumer")
+
+    assert stage.status == BROKEN
+    assert "topology-forbidden" in stage.reason
+    assert report.verdict == BROKEN
+
+
+def test_all_base_depends_on_pass_and_unknown_dep_is_skipped(tmp_path):
+    # all-base depends_on points down/sideways -> does NOT trip topology.
+    # A depends_on naming a repo ABSENT from the catalogue has an unknown plane
+    # and is skipped by the topology layer (never a failure).
+    data = {
+        "repos": [
+            {"repo": "base-a", "family": "Standard", "depends_on": ["base-b"]},
+            {"repo": "base-b", "family": "Evidence pipeline"},
+            {"repo": "base-c", "family": "Standard", "depends_on": ["ghost-repo"]},
+        ],
+        "pipeline": [
+            {"step": 1, "repo": "base-a"},
+            {"step": 2, "repo": "base-b"},
+            {"step": 3, "repo": "base-c"},
         ],
     }
     catalogue = tmp_path / "catalogue.json"
@@ -58,9 +87,9 @@ def test_topology_forbidden_edge_is_broken(tmp_path):
 
     report = validate("grounding-pipeline", catalogue_path=catalogue)
 
-    assert report.stages[1].status == BROKEN
-    assert "topology-forbidden" in report.stages[1].reason
-    assert report.verdict == BROKEN
+    assert all(line.status == PASS for line in report.stages)
+    assert all("topology-forbidden" not in line.reason for line in report.stages)
+    assert report.verdict == PASS
 
 
 def test_report_states_structural_only_caveat():

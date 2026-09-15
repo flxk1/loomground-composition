@@ -3,9 +3,10 @@
 Pure, plane-neutral validation of declared Loomground compositions.
 
 The package reads catalogue data and reports whether each named stage exists and
-respects the dependency direction. It does not run planes, govern an action, or
-attest an outcome. A future runner belongs in `ctrl`; it may consume these reports
-as data.
+whether that repo's declared dependencies (`depends_on`) point down toward base.
+The grounding-pipeline fan-out is walked linearly in v0. It does not run planes,
+govern an action, or attest an outcome. A future runner belongs in `ctrl`; it may
+consume these reports as data.
 
 ## Compositions
 

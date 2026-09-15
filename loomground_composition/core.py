@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
 
 # Pure, plane-neutral, DESCRIPTIVE validator. Reads JSON/text only; runs no plane,
-# opens no socket, spawns no process, imports no loomground_* plane package.
+# opens no network connection, spawns no process, imports no plane package.
 
-DEFAULT_CATALOGUE = Path(
-    "/Users/rafelixkrone/Documents/Claude/Projects/loomground-repos/Loomground Core/CATALOGUE.json"
+# Machine-independent catalogue discovery: sibling-checkout layouts to probe when
+# no path is passed and no env var is set. Walked UP from cwd and the package dir.
+_CATALOGUE_CANDIDATES = (
+    Path("loomground-repos") / "Loomground Core" / "CATALOGUE.json",
+    Path("Loomground Core") / "CATALOGUE.json",
+    Path("loomground") / "CATALOGUE.json",
 )
+_CATALOGUE_NOT_FOUND = "catalogue not found (set LOOMGROUND_CATALOGUE or pass --catalogue)"
 
 # Guard tier is hardcoded exactly: its absence or a broken edge is never a bare PASS.
 GUARD_TIER = frozenset({
@@ -99,16 +105,44 @@ class Report:
         return "\n".join(lines)
 
 
-def _load_catalogue(catalogue_path):
-    path = Path(catalogue_path) if catalogue_path else DEFAULT_CATALOGUE
+def _resolve_catalogue_path(catalogue_path) -> Optional[Path]:
+    # Precedence: (a) explicit arg, (b) env var, (c) discovered sibling checkout.
+    if catalogue_path:
+        return Path(catalogue_path)
+    env = os.environ.get("LOOMGROUND_CATALOGUE")
+    if env:
+        return Path(env)
+    starts = []
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        starts.append(Path.cwd())
     except Exception:
-        return {}, [], set()
+        pass
+    starts.append(Path(__file__).resolve().parent)
+    for start in starts:
+        for base in (start, *start.parents):
+            for cand in _CATALOGUE_CANDIDATES:
+                probe = base / cand
+                try:
+                    if probe.is_file():
+                        return probe
+                except OSError:
+                    continue
+    return None
+
+
+def _load_catalogue(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return {}, {}, set(), {}
     repos = data.get("repos", []) or []
     family = {r.get("repo"): r.get("family") for r in repos if r.get("repo")}
     names = {r.get("repo") for r in repos if r.get("repo")}
-    return data, family, names
+    depends = {
+        r.get("repo"): list(r.get("depends_on") or [])
+        for r in repos if r.get("repo")
+    }
+    return data, family, names, depends
 
 
 def _grounding_stages(catalogue: dict):
@@ -132,7 +166,14 @@ def _stages_for(name: str, catalogue: dict):
 
 
 def validate(composition_name: str, *, catalogue_path=None, installed: Optional[Iterable[str]] = None) -> Report:
-    catalogue, family, cat_names = _load_catalogue(catalogue_path)
+    resolved = _resolve_catalogue_path(catalogue_path)
+    if resolved is None:
+        return Report(
+            composition=composition_name,
+            stages=[StageLine("<catalogue>", "-", BROKEN, _CATALOGUE_NOT_FOUND)],
+            verdict=BROKEN,
+        )
+    catalogue, family, cat_names, depends = _load_catalogue(resolved)
     present = set(installed) if installed is not None else set(cat_names)
 
     stages = _stages_for(composition_name, catalogue)
@@ -153,38 +194,45 @@ def validate(composition_name: str, *, catalogue_path=None, installed: Optional[
         )
 
     lines: list = []
-    prev_repo = None
     for stage, repo in stages:
         is_guard = repo in GUARD_TIER
-        # Layer (b) TOPOLOGY: static, from families; independent of `installed`.
-        if prev_repo is None:
-            edge_ok, edge_reason = True, "entry stage; no inbound edge"
-        else:
-            pp, tp = _plane(family.get(prev_repo)), _plane(family.get(repo))
-            edge_ok = pp <= tp  # permitted when prev is same-or-more-base than this
-            edge_reason = (
-                f"edge {prev_repo} -> {repo} down-toward-base (plane {pp} -> {tp})"
-                if edge_ok else
-                f"edge {prev_repo} -> {repo} points UP toward a consumer / forbidden "
-                f"sideways (plane {pp} -> {tp})"
-            )
+        repo_plane = _plane(family.get(repo))
+
+        # Layer (b) TOPOLOGY: each DECLARED dependency (repos[].depends_on) is an
+        # edge repo -> dep and MUST point DOWN toward base: permitted iff
+        # plane(dep) <= plane(repo). A dep at a HIGHER plane is topology-forbidden.
+        # A dep whose repo is absent from the catalogue has an unknown plane and is
+        # SKIPPED by this layer entirely -- presence is the existence layer's job.
+        topo_ok = True
+        topo_reason = "declared deps point down toward base"
+        for dep in depends.get(repo, []):
+            if dep not in cat_names:
+                continue
+            dep_plane = _plane(family.get(dep))
+            if dep_plane > repo_plane:
+                topo_ok = False
+                topo_reason = (
+                    f"topology-forbidden: {repo} depends UP on {dep} "
+                    f"(plane {repo_plane} -> {dep_plane})"
+                )
+                break
+
         # Layer (a) EXISTENCE: from `installed`.
         exists = repo in present
 
-        if not edge_ok:
+        if not topo_ok:
             status = UNATTESTED if is_guard else BROKEN
-            reason = f"topology-forbidden: {edge_reason}"
+            reason = topo_reason
         elif exists:
-            status, reason = PASS, f"present; {edge_reason}"
+            status, reason = PASS, f"present; {topo_reason}"
         elif is_guard:
             status = UNATTESTED
-            reason = f"GUARD-TIER stage ABSENT -> unattested (never a bare PASS); {edge_reason}"
+            reason = f"GUARD-TIER stage ABSENT -> unattested (never a bare PASS); {topo_reason}"
         else:
             status = SKIPPED
-            reason = f"non-guard stage absent -> skipped; {edge_reason}"
+            reason = f"non-guard stage absent -> skipped; {topo_reason}"
 
         lines.append(StageLine(stage, repo, status, reason))
-        prev_repo = repo
 
     verdict = BROKEN if any(l.status in _FAILING for l in lines) else PASS
     return Report(composition=composition_name, stages=lines, verdict=verdict)
