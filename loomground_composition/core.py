@@ -9,13 +9,6 @@ from typing import Iterable, Optional
 # Pure, plane-neutral, DESCRIPTIVE validator. Reads JSON/text only; runs no plane,
 # opens no network connection, spawns no process, imports no plane package.
 
-# Machine-independent catalogue discovery: sibling-checkout layouts to probe when
-# no path is passed and no env var is set. Walked UP from cwd and the package dir.
-_CATALOGUE_CANDIDATES = (
-    Path("loomground-repos") / "Loomground Core" / "CATALOGUE.json",
-    Path("Loomground Core") / "CATALOGUE.json",
-    Path("loomground") / "CATALOGUE.json",
-)
 _CATALOGUE_NOT_FOUND = "catalogue not found (set LOOMGROUND_CATALOGUE or pass --catalogue)"
 
 # Guard tier is hardcoded exactly: its absence or a broken edge is never a bare PASS.
@@ -106,27 +99,12 @@ class Report:
 
 
 def _resolve_catalogue_path(catalogue_path) -> Optional[Path]:
-    # Precedence: (a) explicit arg, (b) env var, (c) discovered sibling checkout.
+    # Explicit only, no filesystem guessing: the passed path, else LOOMGROUND_CATALOGUE.
     if catalogue_path:
         return Path(catalogue_path)
     env = os.environ.get("LOOMGROUND_CATALOGUE")
     if env:
         return Path(env)
-    starts = []
-    try:
-        starts.append(Path.cwd())
-    except Exception:
-        pass
-    starts.append(Path(__file__).resolve().parent)
-    for start in starts:
-        for base in (start, *start.parents):
-            for cand in _CATALOGUE_CANDIDATES:
-                probe = base / cand
-                try:
-                    if probe.is_file():
-                        return probe
-                except OSError:
-                    continue
     return None
 
 

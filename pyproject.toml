@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "loomground-composition"
 version = "0.1.0"
-description = "Pure, plane-neutral, descriptive validator for Loomground composition well-formedness (structural only; no runner)."
-requires-python = ">=3.9"
+description = "Structural validator for declared Loomground compositions: reports whether a named composition resolves stage by stage."
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Loomground Contributors" }]
+authors = [{ name = "flxk1" }]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
