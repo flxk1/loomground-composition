@@ -2,6 +2,13 @@
 <!-- Copyright 2026 flxk1 -->
 # loomground-composition
 
+> **⚠ DEPRECATED (2026-09-16).** Superseded by the loomground `a2a-compliance`
+> control plane — the 8-role compliance team and the `a2a_plan` / `a2a_ground` /
+> admission / reconcile MCP lifecycle — together with the published signed runtime
+> and the 41+8 ecosystem certification, which cover composing and governing the
+> family more completely. This repository is archived and unmaintained; do not
+> depend on it.
+
 **Does this declared composition still resolve, and where does it break?**
 
 Structural validator for declared Loomground compositions: reports whether a named composition resolves stage by stage.
